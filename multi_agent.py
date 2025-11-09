@@ -54,23 +54,34 @@ optional_env_vars = {
 }
 
 # Check required variables
+logger.info("=== ENV: Validating environment variables ===")
 missing_required = []
 for var, description in required_env_vars.items():
-    if not os.getenv(var):
+    value = os.getenv(var)
+    if not value:
         missing_required.append(f"{var} ({description})")
+        logger.error(f"ENV: Missing required variable: {var}")
+    else:
+        logger.info(f"ENV: Required variable {var}: {'SET' if value else 'NOT SET'}")
 
 if missing_required:
-    logger.error(f"Missing required environment variables: {', '.join(missing_required)}")
+    logger.error(f"ENV: Missing required environment variables: {', '.join(missing_required)}")
     raise ValueError(f"Missing required environment variables: {', '.join(missing_required)}")
 
 # Check optional variables
 missing_optional = []
 for var, description in optional_env_vars.items():
-    if not os.getenv(var):
+    value = os.getenv(var)
+    if not value:
         missing_optional.append(f"{var} ({description})")
+        logger.warning(f"ENV: Missing optional variable: {var}")
+    else:
+        logger.info(f"ENV: Optional variable {var}: SET")
 
 if missing_optional:
-    logger.warning(f"Missing optional environment variables: {', '.join(missing_optional)}")
+    logger.warning(f"ENV: Missing optional environment variables: {', '.join(missing_optional)}")
+
+logger.info("=== ENV: Environment validation completed ===")
 
 common_instructions = (
     "Your name is Echo. You are a story teller that interacts with the user via voice."
@@ -170,16 +181,31 @@ class StoryAgent(Agent):
 
 
 def prewarm(proc: JobProcess):
-    proc.userdata["vad"] = silero.VAD.load()
+    logger.info("=== PREWARM: Starting process initialization ===")
+    try:
+        logger.info("PREWARM: Loading VAD model...")
+        proc.userdata["vad"] = silero.VAD.load()
+        logger.info("PREWARM: VAD model loaded successfully")
+        logger.info(f"PREWARM: Process ID: {os.getpid()}")
+        logger.info("=== PREWARM: Process initialization completed ===")
+    except Exception as e:
+        logger.error(f"PREWARM: Failed to initialize process: {e}")
+        raise
 
 
 async def entrypoint(ctx: JobContext):
+    logger.info("=== ENTRYPOINT: Starting job execution ===")
+    logger.info(f"ENTRYPOINT: Job ID: {ctx.job.id}")
+    logger.info(f"ENTRYPOINT: Room: {ctx.room.name}")
+    logger.info(f"ENTRYPOINT: Process ID: {os.getpid()}")
+    
     # Try to use Deepgram STT with fallback to OpenAI Whisper
     try:
+        logger.info("ENTRYPOINT: Initializing Deepgram STT...")
         stt_provider = deepgram.STT(model="nova-3")
-        logger.info("Using Deepgram STT")
+        logger.info("ENTRYPOINT: Using Deepgram STT")
     except Exception as e:
-        logger.warning(f"Failed to initialize Deepgram STT: {e}. Falling back to OpenAI Whisper")
+        logger.warning(f"ENTRYPOINT: Failed to initialize Deepgram STT: {e}. Falling back to OpenAI Whisper")
         stt_provider = openai.STT()
     
     session = AgentSession[StoryData](
@@ -205,15 +231,23 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(log_usage)
 
-    await session.start(
-        agent=IntroAgent(),
-        room=ctx.room,
-        room_input_options=RoomInputOptions(
-            # uncomment to enable Krisp BVC noise cancellation
-            # noise_cancellation=noise_cancellation.BVC(),
-        ),
-        room_output_options=RoomOutputOptions(transcription_enabled=True),
-    )
+    logger.info("ENTRYPOINT: Starting agent session...")
+    try:
+        await session.start(
+            agent=IntroAgent(),
+            room=ctx.room,
+            room_input_options=RoomInputOptions(
+                # uncomment to enable Krisp BVC noise cancellation
+                # noise_cancellation=noise_cancellation.BVC(),
+            ),
+            room_output_options=RoomOutputOptions(transcription_enabled=True),
+        )
+        logger.info("ENTRYPOINT: Agent session completed successfully")
+    except Exception as e:
+        logger.error(f"ENTRYPOINT: Agent session failed: {e}")
+        raise
+    finally:
+        logger.info("=== ENTRYPOINT: Job execution finished ===")
 
 
 def start_simple_health_server():
@@ -255,26 +289,53 @@ def start_simple_health_server():
 
 if __name__ == "__main__":
     import sys
+    import signal
+    
+    logger.info("=== MAIN: Application startup ===")
+    logger.info(f"MAIN: Python version: {sys.version}")
+    logger.info(f"MAIN: Process ID: {os.getpid()}")
+    logger.info(f"MAIN: Command line args: {sys.argv}")
     
     # Configure port based on environment
     # Cloud Run sets PORT environment variable, default to 8081 for local development
     health_port = int(os.environ.get('PORT', 8081))
     
-    logger.info(f"Starting LiveKit agent with health check on port {health_port}")
-    logger.info(f"Environment: PORT={os.environ.get('PORT', 'not set')}")
-    logger.info(f"LiveKit URL: {os.environ.get('LIVEKIT_URL', 'not set')}")
+    logger.info(f"MAIN: Starting LiveKit agent with health check on port {health_port}")
+    logger.info(f"MAIN: Environment: PORT={os.environ.get('PORT', 'not set')}")
+    logger.info(f"MAIN: LiveKit URL: {os.environ.get('LIVEKIT_URL', 'not set')}")
+    logger.info(f"MAIN: LiveKit API Key: {'SET' if os.environ.get('LIVEKIT_API_KEY') else 'NOT SET'}")
+    logger.info(f"MAIN: LiveKit API Secret: {'SET' if os.environ.get('LIVEKIT_API_SECRET') else 'NOT SET'}")
+    
+    # Add signal handlers to track shutdown
+    def signal_handler(signum, frame):
+        logger.info(f"MAIN: Received signal {signum}")
+        logger.info("MAIN: Starting graceful shutdown...")
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
     
     # For both Cloud Run and local development, use the same approach
     # Cloud Run will handle health checks via the LiveKit agent's built-in endpoints
+    logger.info("MAIN: Creating WorkerOptions...")
+    worker_options = WorkerOptions(
+        entrypoint_fnc=entrypoint,
+        prewarm_fnc=prewarm,
+        port=health_port,
+        initialize_process_timeout=60
+    )
+    logger.info("MAIN: WorkerOptions created successfully")
+    
     try:
-        cli.run_app(
-            WorkerOptions(
-                entrypoint_fnc=entrypoint,
-                prewarm_fnc=prewarm,
-                port=health_port,
-                initialize_process_timeout=60
-            ),
-        )
+        logger.info("MAIN: Starting LiveKit CLI...")
+        cli.run_app(worker_options)
+        logger.info("MAIN: LiveKit CLI finished normally")
+    except KeyboardInterrupt:
+        logger.info("MAIN: Received KeyboardInterrupt")
     except Exception as e:
-        logger.error(f"Failed to start LiveKit agent: {e}")
+        logger.error(f"MAIN: Failed to start LiveKit agent: {e}")
+        logger.error(f"MAIN: Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"MAIN: Full traceback:\n{traceback.format_exc()}")
         raise
+    finally:
+        logger.info("=== MAIN: Application shutdown ===")
