@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
-# Uncomment if you need custom health server
-# from fastapi import FastAPI
-# import uvicorn
+from fastapi import FastAPI
+import uvicorn
 
 from livekit import api
 from livekit.agents import (
