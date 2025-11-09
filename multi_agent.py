@@ -256,13 +256,26 @@ def start_simple_health_server():
 
 if __name__ == "__main__":
     import sys
-        
+    
+    # Configure port based on environment
+    # Cloud Run sets PORT environment variable, default to 8081 for local development
+    health_port = int(os.environ.get('PORT', 8081))
+    
+    logger.info(f"Starting LiveKit agent with health check on port {health_port}")
+    logger.info(f"Environment: PORT={os.environ.get('PORT', 'not set')}")
+    logger.info(f"LiveKit URL: {os.environ.get('LIVEKIT_URL', 'not set')}")
+    
     # For both Cloud Run and local development, use the same approach
     # Cloud Run will handle health checks via the LiveKit agent's built-in endpoints
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            prewarm_fnc=prewarm,
-            initialize_process_timeout=60
-        ),
-    )
+    try:
+        cli.run_app(
+            WorkerOptions(
+                entrypoint_fnc=entrypoint,
+                prewarm_fnc=prewarm,
+                port=health_port,
+                initialize_process_timeout=60
+            ),
+        )
+    except Exception as e:
+        logger.error(f"Failed to start LiveKit agent: {e}")
+        raise
