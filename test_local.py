@@ -10,7 +10,11 @@ from dotenv import load_dotenv
 
 def check_environment():
     """Check if all required environment variables are set."""
-    load_dotenv()
+    # Only load .env file if we're not in CI environment
+    is_ci = os.getenv('CI') or os.getenv('GITHUB_ACTIONS')
+    
+    if not is_ci:
+        load_dotenv()
     
     required_vars = [
         'LIVEKIT_URL',
@@ -27,11 +31,18 @@ def check_environment():
             missing_vars.append(var)
     
     if missing_vars:
-        print("❌ Missing required environment variables:")
-        for var in missing_vars:
-            print(f"   - {var}")
-        print("\nPlease check your .env file and ensure all variables are set.")
-        return False
+        if is_ci:
+            print("⚠️  Running in CI environment - environment variables not required for build validation")
+            print("   Missing variables (expected in CI):")
+            for var in missing_vars:
+                print(f"   - {var}")
+            return True  # Allow CI to pass without env vars
+        else:
+            print("❌ Missing required environment variables:")
+            for var in missing_vars:
+                print(f"   - {var}")
+            print("\nPlease check your .env file and ensure all variables are set.")
+            return False
     
     print("✅ All required environment variables are set")
     return True
@@ -50,12 +61,20 @@ def check_dependencies():
 
 def validate_api_keys():
     """Basic validation of API key formats."""
-    load_dotenv()
+    is_ci = os.getenv('CI') or os.getenv('GITHUB_ACTIONS')
+    
+    if not is_ci:
+        load_dotenv()
     
     livekit_url = os.getenv('LIVEKIT_URL')
     openai_key = os.getenv('OPENAI_API_KEY')
     deepgram_key = os.getenv('DEEPGRAM_API_KEY')
     eleven_key = os.getenv('ELEVEN_API_KEY')
+    
+    # Skip validation in CI if no keys are present
+    if is_ci and not any([livekit_url, openai_key, deepgram_key, eleven_key]):
+        print("⚠️  Running in CI - API key validation skipped")
+        return True
     
     issues = []
     
@@ -94,14 +113,23 @@ def main():
             all_passed = False
         print()
     
+    is_ci = os.getenv('CI') or os.getenv('GITHUB_ACTIONS')
+    
     if all_passed:
-        print("🎉 All checks passed! You can now run:")
-        print("   python multi_agent.py")
-        print("\nOr test with Docker:")
-        print("   docker build -t slang-agent .")
-        print("   docker run --env-file .env slang-agent")
+        if is_ci:
+            print("🎉 All CI validation checks passed!")
+            print("   Build environment is ready for deployment")
+        else:
+            print("🎉 All checks passed! You can now run:")
+            print("   python multi_agent.py start")
+            print("\nOr test with Docker:")
+            print("   docker build -t slang-agent .")
+            print("   docker run --env-file .env slang-agent")
     else:
-        print("❌ Some checks failed. Please fix the issues above before running the agent.")
+        if is_ci:
+            print("❌ CI validation failed. Please fix the issues above.")
+        else:
+            print("❌ Some checks failed. Please fix the issues above before running the agent.")
         sys.exit(1)
 
 if __name__ == "__main__":

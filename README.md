@@ -268,15 +268,19 @@ make clean         # Clean up temporary files
 
 #### 1. **Local Validation Script**
 ```bash
-# Check environment, dependencies, and API key formats
+# Check environment, dependencies, and API key formats (requires .env file)
 python test_local.py
+
+# CI validation (no environment variables required)
+python test_ci.py
 ```
 
 #### 2. **Make Commands**
 ```bash
 make help          # Show all available commands
 make install       # Setup virtual environment
-make test          # Run validation checks
+make test          # Run local validation checks (requires .env)
+make test-ci       # Run CI validation checks (no env vars needed)
 make run           # Start the agent
 make docker-build  # Build Docker image
 make docker-run    # Run Docker container
@@ -375,15 +379,12 @@ Add the following secrets to your GitHub repository:
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
 | `GCP_PROJECT_ID` | Your Google Cloud Project ID | `my-project-123` |
-| `GCP_SA_KEY` | Service account JSON key (entire content) | `{"type": "service_account"...}` |
+| `GCP_REGION` | Google Cloud region for deployment | `us-central1` |
+| `GCP_SERVICE_ACCOUNT` | Service account email | `slang-agent-sa@my-project-123.iam.gserviceaccount.com` |
+| `GCP_WIF_PROVIDER` | Workload Identity Federation provider | `projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
 | `LIVEKIT_URL` | LiveKit server URL | `wss://your-instance.livekit.cloud` |
-| `LIVEKIT_API_KEY` | LiveKit API key | `APIyR7CePBURVW9` |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | `JeGnqBuJtvkemIsiIxDnJIpaB3B2PqxZXtjfxpr1gy7B` |
-| `AGENT_IDENTITY` | Agent identifier | `slang-agent` |
-| `ROOM_NAME` | Default room name | `slang-session` |
-| `OPENAI_API_KEY` | OpenAI API key | `sk-proj-...` |
-| `DEEPGRAM_API_KEY` | Deepgram API key | `832cb1ca10680dae...` |
-| `ELEVEN_API_KEY` | ElevenLabs API key | `sk_529fdb77355d68f4...` |
+
+**Note**: API keys are now stored in Google Secret Manager instead of GitHub secrets for better security.
 
 ### Deployment Process
 

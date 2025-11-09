@@ -14,8 +14,11 @@ install: ## Install dependencies and setup virtual environment
 test: ## Run local validation tests
 	python test_local.py
 
+test-ci: ## Run CI validation tests (no env vars required)
+	python test_ci.py
+
 run: ## Run the agent locally
-	python multi_agent.py
+	python multi_agent.py start
 
 docker-build: ## Build Docker image
 	docker build -t slang-agent .
