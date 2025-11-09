@@ -199,19 +199,25 @@ if __name__ == "__main__":
     
     # Check if running with 'start' command (for Cloud Run)
     if len(sys.argv) > 1 and sys.argv[1] == "start":
-        async def main():
-            # Start health check server for Cloud Run
-            await start_health_server()
-            
-            # Start the LiveKit agent
-            await cli.run_app(
-                WorkerOptions(
-                    entrypoint_fnc=entrypoint,
-                    prewarm_fnc=prewarm,
-                ),
-            )
+        # For Cloud Run, we need to start the health server in a separate thread
+        # to avoid event loop conflicts with LiveKit CLI
+        def start_health_server_sync():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(start_health_server())
+            loop.run_forever()
         
-        asyncio.run(main())
+        # Start health server in background thread
+        health_thread = threading.Thread(target=start_health_server_sync, daemon=True)
+        health_thread.start()
+        
+        # Let LiveKit CLI manage the main event loop
+        cli.run_app(
+            WorkerOptions(
+                entrypoint_fnc=entrypoint,
+                prewarm_fnc=prewarm,
+            ),
+        )
     else:
         # Regular CLI mode for local development
         cli.run_app(
