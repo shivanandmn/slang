@@ -255,8 +255,7 @@ def start_simple_health_server():
 
 if __name__ == "__main__":
     start_simple_health_server()
-    
-    logger.info(f"Starting LiveKit agent with health check on port {health_port}")
+
     logger.info(f"Environment: PORT={os.environ.get('PORT', 'not set')}")
     logger.info(f"LiveKit URL: {os.environ.get('LIVEKIT_URL', 'not set')}")
     
