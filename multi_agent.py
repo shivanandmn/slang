@@ -39,6 +39,38 @@ logger = logging.getLogger("multi-agent")
 
 load_dotenv()
 
+# Validate required environment variables
+required_env_vars = {
+    "LIVEKIT_URL": "LiveKit server URL",
+    "LIVEKIT_API_KEY": "LiveKit API key", 
+    "LIVEKIT_API_SECRET": "LiveKit API secret",
+    "OPENAI_API_KEY": "OpenAI API key"
+}
+
+optional_env_vars = {
+    "DEEPGRAM_API_KEY": "Deepgram API key (fallback to OpenAI STT if missing)",
+    "ELEVEN_API_KEY": "ElevenLabs API key"
+}
+
+# Check required variables
+missing_required = []
+for var, description in required_env_vars.items():
+    if not os.getenv(var):
+        missing_required.append(f"{var} ({description})")
+
+if missing_required:
+    logger.error(f"Missing required environment variables: {', '.join(missing_required)}")
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_required)}")
+
+# Check optional variables
+missing_optional = []
+for var, description in optional_env_vars.items():
+    if not os.getenv(var):
+        missing_optional.append(f"{var} ({description})")
+
+if missing_optional:
+    logger.warning(f"Missing optional environment variables: {', '.join(missing_optional)}")
+
 common_instructions = (
     "Your name is Echo. You are a story teller that interacts with the user via voice."
     "You are curious and friendly, with a sense of humor."
@@ -141,11 +173,19 @@ def prewarm(proc: JobProcess):
 
 
 async def entrypoint(ctx: JobContext):
+    # Try to use Deepgram STT with fallback to OpenAI Whisper
+    try:
+        stt_provider = deepgram.STT(model="nova-3")
+        logger.info("Using Deepgram STT")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Deepgram STT: {e}. Falling back to OpenAI Whisper")
+        stt_provider = openai.STT()
+    
     session = AgentSession[StoryData](
         vad=ctx.proc.userdata["vad"],
         # any combination of STT, LLM, TTS, or realtime API can be used
         llm=openai.LLM(model="gpt-4o-mini"),
-        stt=deepgram.STT(model="nova-3"),
+        stt=stt_provider,
         tts=elevenlabs.TTS(),
         userdata=StoryData(),
     )
