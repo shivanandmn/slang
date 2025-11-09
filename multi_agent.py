@@ -255,6 +255,7 @@ def start_simple_health_server():
 
 
 if __name__ == "__main__":
+    start_simple_health_server()
     import sys
     
     # Configure port based on environment
