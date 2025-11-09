@@ -262,7 +262,8 @@ def start_simple_health_server():
         # from fastapi import FastAPI
         # import uvicorn
         
-        health_port = int(os.getenv("HEALTH_PORT", "8080"))
+        # Use Cloud Run's PORT for immediate health checks
+        health_port = int(os.environ.get('PORT', 8080))
 
         app = FastAPI(title="Voice Agent Health", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -300,6 +301,10 @@ if __name__ == "__main__":
     # Cloud Run sets PORT environment variable, default to 8081 for local development
     health_port = int(os.environ.get('PORT', 8081))
     
+    # Start the custom health server immediately for Cloud Run
+    logger.info("MAIN: Starting immediate health server for Cloud Run...")
+    start_simple_health_server()
+    
     logger.info(f"MAIN: Starting LiveKit agent with health check on port {health_port}")
     logger.info(f"MAIN: Environment: PORT={os.environ.get('PORT', 'not set')}")
     logger.info(f"MAIN: LiveKit URL: {os.environ.get('LIVEKIT_URL', 'not set')}")
@@ -315,19 +320,23 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     
     # For both Cloud Run and local development, use the same approach
-    # Cloud Run will handle health checks via the LiveKit agent's built-in endpoints
+    # Custom health server handles Cloud Run health checks on PORT
+    # LiveKit worker uses a different port to avoid conflicts
+    livekit_port = health_port + 1  # Use next port for LiveKit
+    
     logger.info("MAIN: Creating WorkerOptions...")
     worker_options = WorkerOptions(
         entrypoint_fnc=entrypoint,
         prewarm_fnc=prewarm,
-        port=health_port,
+        port=livekit_port,  # Use different port to avoid conflict with custom health server
         initialize_process_timeout=120,  # Increase timeout for Cloud Run
         # Add more debugging options
         permissions=None,  # Use default permissions
         worker_type=None,  # Use default worker type
     )
     logger.info("MAIN: WorkerOptions created successfully")
-    logger.info(f"MAIN: Worker will listen on port {health_port}")
+    logger.info(f"MAIN: Custom health server on port {health_port}")
+    logger.info(f"MAIN: LiveKit worker will listen on port {livekit_port}")
     logger.info(f"MAIN: Process timeout set to 120 seconds")
     
     try:
