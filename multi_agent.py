@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
-from aiohttp import web
+# Uncomment if you need custom health server
+# from fastapi import FastAPI
+# import uvicorn
 
 from livekit import api
 from livekit.agents import (
@@ -215,54 +217,52 @@ async def entrypoint(ctx: JobContext):
     )
 
 
-async def health_check(request):
-    """Health check endpoint for Cloud Run"""
-    return web.Response(text="OK", status=200)
-
-
-async def start_health_server():
-    """Start HTTP health check server for Cloud Run"""
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    app.router.add_get('/health', health_check)
+def start_simple_health_server():
+    """Start a very simple health server in a separate thread.
     
-    port = int(os.environ.get('PORT', 8080))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f"Health check server started on port {port}")
+    WARNING: This approach can cause event loop conflicts with LiveKit.
+    Only use if you absolutely need custom health endpoints.
+    The built-in LiveKit health server is recommended instead.
+    """
+    try:
+        # Uncomment these imports at the top of the file first:
+        # from fastapi import FastAPI
+        # import uvicorn
+        
+        health_port = int(os.getenv("HEALTH_PORT", "8080"))
+
+        app = FastAPI(title="Voice Agent Health", docs_url=None, redoc_url=None, openapi_url=None)
+
+        @app.get("/")
+        @app.get("/health")
+        def health():
+            return {"status": "healthy"}
+
+        @app.get("/ready")
+        def ready():
+            return {"status": "ready"}
+
+        def run_server():
+            uvicorn.run(app, host="0.0.0.0", port=health_port, log_level="error")
+
+        # Start in background thread
+        health_thread = threading.Thread(target=run_server, daemon=True)
+        health_thread.start()
+        logger.info(f"Health server started on port {health_port}")
+
+    except Exception as e:
+        logger.warning(f"Failed to start health server: {e}")
 
 
 if __name__ == "__main__":
     import sys
-    
-    # Check if running with 'start' command (for Cloud Run)
-    if len(sys.argv) > 1 and sys.argv[1] == "start":
-        # For Cloud Run, we need to start the health server in a separate thread
-        # to avoid event loop conflicts with LiveKit CLI
-        def start_health_server_sync():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(start_health_server())
-            loop.run_forever()
         
-        # Start health server in background thread
-        health_thread = threading.Thread(target=start_health_server_sync, daemon=True)
-        health_thread.start()
-        
-        # Let LiveKit CLI manage the main event loop
-        cli.run_app(
-            WorkerOptions(
-                entrypoint_fnc=entrypoint,
-                prewarm_fnc=prewarm,
-            ),
-        )
-    else:
-        # Regular CLI mode for local development
-        cli.run_app(
-            WorkerOptions(
-                entrypoint_fnc=entrypoint,
-                prewarm_fnc=prewarm,
-            ),
-        )
+    # For both Cloud Run and local development, use the same approach
+    # Cloud Run will handle health checks via the LiveKit agent's built-in endpoints
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
+            initialize_process_timeout=60
+        ),
+    )
