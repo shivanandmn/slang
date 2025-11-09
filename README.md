@@ -300,33 +300,72 @@ This project includes automated deployment to Google Cloud Run using GitHub Acti
 
 ### Prerequisites
 
-1. **Google Cloud Project**
-   - Create a GCP project
-   - Enable Cloud Run API
-   - Enable Container Registry API
-
-2. **Service Account**
+1. **Google Cloud Project Setup**
    ```bash
-   # Create service account
-   gcloud iam service-accounts create github-actions \
-     --display-name="GitHub Actions"
+   # Set your project ID
+   export PROJECT_ID="your-project-id"
+   
+   # Enable required APIs
+   gcloud services enable run.googleapis.com
+   gcloud services enable cloudbuild.googleapis.com
+   gcloud services enable secretmanager.googleapis.com
+   gcloud services enable iamcredentials.googleapis.com
+   ```
+
+2. **Create Service Account**
+   ```bash
+   # Create service account for Cloud Run
+   gcloud iam service-accounts create slang-agent-sa \
+     --display-name="Slang Agent Service Account" \
+     --project=$PROJECT_ID
    
    # Grant necessary permissions
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member="serviceAccount:github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:slang-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
      --role="roles/run.admin"
    
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member="serviceAccount:github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:slang-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
      --role="roles/storage.admin"
    
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member="serviceAccount:github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-     --role="roles/iam.serviceAccountUser"
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:slang-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+3. **Setup Workload Identity Federation**
+   ```bash
+   # Create workload identity pool
+   gcloud iam workload-identity-pools create "github-pool" \
+     --project=$PROJECT_ID \
+     --location="global" \
+     --display-name="GitHub Actions Pool"
    
-   # Create and download key
-   gcloud iam service-accounts keys create key.json \
-     --iam-account=github-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   # Create workload identity provider
+   gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+     --project=$PROJECT_ID \
+     --location="global" \
+     --workload-identity-pool="github-pool" \
+     --display-name="GitHub Actions Provider" \
+     --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+     --issuer-uri="https://token.actions.githubusercontent.com"
+   
+   # Allow GitHub Actions to impersonate service account
+   gcloud iam service-accounts add-iam-policy-binding \
+     slang-agent-sa@$PROJECT_ID.iam.gserviceaccount.com \
+     --project=$PROJECT_ID \
+     --role="roles/iam.workloadIdentityUser" \
+     --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/YOUR_GITHUB_USERNAME/slang"
+   ```
+
+4. **Create Secrets in Secret Manager**
+   ```bash
+   # Create secrets for API keys
+   echo -n "your_livekit_api_key" | gcloud secrets create LIVEKIT_API_KEY --data-file=-
+   echo -n "your_livekit_api_secret" | gcloud secrets create LIVEKIT_API_SECRET --data-file=-
+   echo -n "your_openai_api_key" | gcloud secrets create OPENAI_API_KEY --data-file=-
+   echo -n "your_deepgram_api_key" | gcloud secrets create DEEPGRAM_API_KEY --data-file=-
+   echo -n "your_eleven_api_key" | gcloud secrets create ELEVEN_API_KEY --data-file=-
    ```
 
 ### GitHub Secrets Configuration
