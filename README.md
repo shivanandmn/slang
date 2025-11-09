@@ -465,3 +465,52 @@ The Cloud Run service is configured with:
 ## License
 
 [Add your license information here]
+
+
+
+# Check your workload identity pool
+gcloud iam workload-identity-pools describe github-pool \
+  --project=openlabel-lab-firebase \
+  --location=global
+
+# Check your provider configuration
+gcloud iam workload-identity-pools providers describe github-provider \
+  --project=openlabel-lab-firebase \
+  --location=global \
+  --workload-identity-pool=github-pool
+
+# Update the WIF provider to match your actual repository
+gcloud iam workload-identity-pools providers update github-provider \
+  --project=openlabel-lab-firebase \
+  --location=global \
+  --workload-identity-pool=github-pool \
+  --attribute-condition="attribute.repository=='shivanandmn/slang' && attribute.ref=='refs/heads/main'"
+
+
+
+  ```
+# Create the service account
+gcloud iam service-accounts create slang-agent-sa \
+  --display-name="Slang Agent Service Account" \
+  --project=openlabel-lab-firebase
+
+# Grant necessary permissions
+gcloud projects add-iam-policy-binding openlabel-lab-firebase \
+  --member="serviceAccount:slang-agent-sa@openlabel-lab-firebase.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding openlabel-lab-firebase \
+  --member="serviceAccount:slang-agent-sa@openlabel-lab-firebase.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+gcloud projects add-iam-policy-binding openlabel-lab-firebase \
+  --member="serviceAccount:slang-agent-sa@openlabel-lab-firebase.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Allow GitHub Actions to impersonate the service account
+gcloud iam service-accounts add-iam-policy-binding \
+  slang-agent-sa@openlabel-lab-firebase.iam.gserviceaccount.com \
+  --project=openlabel-lab-firebase \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/555118069489/locations/global/workloadIdentityPools/github-pool/attribute.repository/shivanandmn/slang"
+  ```
