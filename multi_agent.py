@@ -321,12 +321,23 @@ if __name__ == "__main__":
         entrypoint_fnc=entrypoint,
         prewarm_fnc=prewarm,
         port=health_port,
-        initialize_process_timeout=60
+        initialize_process_timeout=120,  # Increase timeout for Cloud Run
+        # Add more debugging options
+        permissions=None,  # Use default permissions
+        worker_type=None,  # Use default worker type
     )
     logger.info("MAIN: WorkerOptions created successfully")
+    logger.info(f"MAIN: Worker will listen on port {health_port}")
+    logger.info(f"MAIN: Process timeout set to 120 seconds")
     
     try:
         logger.info("MAIN: Starting LiveKit CLI...")
+        
+        # Add a small delay to ensure logging is flushed
+        import time
+        time.sleep(1)
+        
+        # Start the CLI
         cli.run_app(worker_options)
         logger.info("MAIN: LiveKit CLI finished normally")
     except KeyboardInterrupt:
