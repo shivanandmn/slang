@@ -330,9 +330,6 @@ if __name__ == "__main__":
         prewarm_fnc=prewarm,
         port=livekit_port,  # Use different port to avoid conflict with custom health server
         initialize_process_timeout=120,  # Increase timeout for Cloud Run
-        # Add more debugging options
-        permissions=None,  # Use default permissions
-        worker_type=None,  # Use default worker type
     )
     logger.info("MAIN: WorkerOptions created successfully")
     logger.info(f"MAIN: Custom health server on port {health_port}")
