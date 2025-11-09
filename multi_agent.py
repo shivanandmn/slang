@@ -1,8 +1,12 @@
+import asyncio
 import logging
+import os
+import threading
 from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
+from aiohttp import web
 
 from livekit import api
 from livekit.agents import (
@@ -171,5 +175,48 @@ async def entrypoint(ctx: JobContext):
     )
 
 
+async def health_check(request):
+    """Health check endpoint for Cloud Run"""
+    return web.Response(text="OK", status=200)
+
+
+async def start_health_server():
+    """Start HTTP health check server for Cloud Run"""
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
+    
+    port = int(os.environ.get('PORT', 8080))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f"Health check server started on port {port}")
+
+
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
+    import sys
+    
+    # Check if running with 'start' command (for Cloud Run)
+    if len(sys.argv) > 1 and sys.argv[1] == "start":
+        async def main():
+            # Start health check server for Cloud Run
+            await start_health_server()
+            
+            # Start the LiveKit agent
+            await cli.run_app(
+                WorkerOptions(
+                    entrypoint_fnc=entrypoint,
+                    prewarm_fnc=prewarm,
+                ),
+            )
+        
+        asyncio.run(main())
+    else:
+        # Regular CLI mode for local development
+        cli.run_app(
+            WorkerOptions(
+                entrypoint_fnc=entrypoint,
+                prewarm_fnc=prewarm,
+            ),
+        )
